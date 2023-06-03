@@ -23,7 +23,7 @@ pkgs:
   glib
   gtk2
   gtk3
-  libxcrypt
+  libxcrypt-legacy
   # For fetching project templates when creating projects
   gitMinimal
   # For the `arch` command
