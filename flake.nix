@@ -65,6 +65,7 @@
       inherit name;
       inherit targetPkgs;
       runScript = pkgs.writeScript "xilinx-${product}-runner" ((runScriptPrefix {}) + ''
+	LD_LIBRARY_PATH=/lib:$LD_LIBRARY_PATH
         if [[ -d $INSTALL_DIR/${product}/$VERSION ]]; then
           $INSTALL_DIR/${product}/$VERSION/bin/${name} "$@"
         else
@@ -112,7 +113,7 @@
            executable available anywhere on your system.
         ============================
         EOF
-        exec bash
+        LD_LIBRARY_PATH=/lib:$LD_LIBRARY_PATH exec bash
       '');
       meta = metaCommon // {
         homepage = "https://gitlab.com/doronbehar/nix-xilinx";
