@@ -83,9 +83,9 @@
             + ''
               	LD_LIBRARY_PATH=/lib:$LD_LIBRARY_PATH
                       if [[ -d $INSTALL_DIR/$VERSION/${product} ]]; then
-                        $INSTALL_DIR/$VERSION/${product}bin/${name} "$@"
+                        $INSTALL_DIR/$VERSION/${product}/bin/${name} "$@"
                       else
-                        echo It seems ${product} isn\'t installed because '$INSTALL_DIR/${product}/$VERSION' doesn\'t exist. Follow >&2
+                        echo It seems ${product} isn\'t installed because '$INSTALL_DIR/$VERSION/${product}' doesn\'t exist. Follow >&2
                         echo the instructions in the README of nix-xilinx and make sure ${product} is selected during the >&2
                         echo installation wizard. If it\'s supposed to be installed, check that your \~/.config/xilinx/nix.sh >&2
                         echo have a correct '$VERSION' variable set in it - check that the '$VERSION' directory actually exists. >&2
@@ -94,22 +94,22 @@
             ''
           );
           inherit meta;
-          extraInstallCommands = ''
-            install -Dm644 ${desktopItem}/share/applications/${name}.desktop $out/share/applications/${name}.desktop
-            substituteInPlace $out/share/applications/${name}.desktop \
-              --replace "@out@" ${placeholder "out"}
-            for size in 64 256 512; do
-              ${
-                {
-                  vivado = "${xdg_icon_cmd_prefix} ${./icons/vivado.png} ${name}";
-                  vitis_hls = "${xdg_icon_cmd_prefix} ${./icons/vitis_hls.png} ${name}";
-                  vitis = "echo nix-xilinx warning: No icon is available for product ${product} >&2";
-                  model_composer = "${xdg_icon_cmd_prefix} ${./icons/matlab.png} ${name}";
-                }
-                .${name}
-              }
-            done
-          '';
+          # extraInstallCommands = ''
+          #   install -Dm644 ${desktopItem}/share/applications/${name}.desktop $out/share/applications/${name}.desktop
+          #   substituteInPlace $out/share/applications/${name}.desktop \
+          #     --replace "@out@" ${placeholder "out"}
+          #   for size in 64 256 512; do
+          #     ${
+          #       {
+          #         vivado = "${xdg_icon_cmd_prefix} ${./icons/vivado.png} ${name}";
+          #         vitis_hls = "${xdg_icon_cmd_prefix} ${./icons/vitis_hls.png} ${name}";
+          #         vitis = "echo nix-xilinx warning: No icon is available for product ${product} >&2";
+          #         model_composer = "${xdg_icon_cmd_prefix} ${./icons/matlab.png} ${name}";
+          #       }
+          #       .${name}
+          #     }
+          # done
+          # '';
         };
     in
     {
