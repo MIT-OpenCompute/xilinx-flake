@@ -10,10 +10,10 @@ This includes the necessary packages containing the necessary linkers to install
 
 == Install
 
-Like any other distro user, you should first go to your Xilinx account at:
-https://www.xilinx.com/support/download.html and download the installation
-`.tar` file. To run this file, you'll need to make it an executable with `chmod
-+x FPGA*.tar` (DO NOT TRY TO RUN THE .BIN YOU WILL NOT HAVE A GOOD TIME) and enter into an FHS environment that a nix-shell will provide.
+Like any other distro user, you should first go to your Xilinx account at: 
+https://www.xilinx.com/support/download.html and download the installation 
+`.tar` file. To extract run `tar xvf FPGA*.tar` To run this installer, you must enter in the shell. 
+(DO NOT TRY TO RUN THE .BIN YOU WILL NOT HAVE A GOOD TIME) 
 This tarball is rather large after extraction. Make sure you have roughly 300 GB to spare. (don't worry, you can delete the zip and download folder later)
 
 === Run `xilinx-shell` with stable Nix > 2.3
