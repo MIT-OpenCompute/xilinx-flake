@@ -75,7 +75,7 @@
           };
           xdg_icon_cmd_prefix = "env XDG_DATA_HOME=$out/share ${pkgs.xdg-utils}/bin/xdg-icon-resource install --novendor --size $size --mode user";
         in
-        pkgs.buildFHSUserEnv {
+        pkgs.buildFHSEnv {
           inherit name;
           inherit targetPkgs;
           runScript = pkgs.writeScript "xilinx-${product}-runner" (
@@ -113,7 +113,7 @@
         };
     in
     {
-      packages.x86_64-linux.xilinx-shell = pkgs.buildFHSUserEnv {
+      packages.x86_64-linux.xilinx-shell = pkgs.buildFHSEnv {
         name = "xilinx-shell";
         inherit targetPkgs;
         runScript = pkgs.writeScript "xilinx-shell-runner" (
