@@ -4,6 +4,7 @@ pkgs:
 
 (with pkgs; [
   bash
+  util-linux
   coreutils
   zlib
   lsb-release
@@ -16,7 +17,6 @@ pkgs:
   xorg.libXi
   xorg.libXft
   xorg.libxcb
-  xorg.libxcb
   # common requirements
   freetype
   fontconfig
@@ -24,6 +24,8 @@ pkgs:
   gtk2
   gtk3
   libxcrypt-legacy
+  libdrm
+  libgbm
   # For fetching project templates when creating projects
   gitMinimal
   # For the `arch` command
