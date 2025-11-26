@@ -12,13 +12,14 @@ This includes the necessary packages containing the necessary linkers to install
 
 Like any other distro user, you should first go to your Xilinx account at:
 https://www.xilinx.com/support/download.html and download the installation
-`.bin` file. To run this file, you'll need to make it an executable with `chmod
-+x Xilinx*.bin` and enter into an FHS environment that a nix-shell will provide.
+`.tar` file. To run this file, you'll need to make it an executable with `chmod
++x FPGA*.tar` (DO NOT TRY TO RUN THE .BIN YOU WILL NOT HAVE A GOOD TIME) and enter into an FHS environment that a nix-shell will provide.
+This tarball is rather large after extraction. Make sure you have roughly 300 GB to spare. (don't worry, you can delete the zip and download folder later)
 
 === Run `xilinx-shell` with stable Nix > 2.3
 
 ....
-nix run gitlab:doronbehar/nix-xilinx#xilinx-shell
+nix run github:MIT-OpenCompute/xilinx-flake#xilinx-shell
 ....
 
 === Installation of vivado & vitis themselves
@@ -29,7 +30,7 @@ Installing vivado using .bin sucks install the full tarball and install directly
 ./xsetup -b ConfigGen
 ....
 
-Go to `~/.Xilinx/install_config.txt` and edit the configuration file
+Go to `~/.Xilinx/install_config.txt` and edit the configuration file 
 Here is an example of what I have as my config as I need a certain Vivado tool for my specific FPGA. 
 
 ....
@@ -73,10 +74,10 @@ Then, run `./xsetup -a XilinxEULA,3rdPartyEULA,WebTalkTerms -b Install -c $HOME/
 With what was done now, you can run `vivado` / `vitis` from the command line with:
 
 ....
-nix run gitlab:doronbehar/nix-xilinx#vivado
+nix run github:MIT-OpenCompute/xilinx-flake#vivado
 ....
 
-Use `nix search gitlab:doronbehar/nix-xilinx` to view all other packages defined.
+Use `nix search github:MIT-OpenCompute/xilinx-flake` to view all other packages defined.
 
 It's likely you'd like to make the FHS environment survive garbage
 collections and add a desktop launcher to your system. To do that you can
@@ -92,7 +93,7 @@ inputs = {
     # Recommended if you also override the default nixpkgs flake, common among
     # nixos-unstable users:
     #inputs.nixpkgs.follows = "nixpkgs";
-    url = "gitlab:doronbehar/nix-xilinx";
+    url = "github:MIT-OpenCompute/xilinx-flake";
   };
   # ...
   outputs = { self, nixpkgs, nix-xilinx }:
@@ -155,10 +156,6 @@ Add to your `configration.nix` (untested, but should work):
     )
   ];
 ----
-
-==== Home Manager setup
-
-TODO
 
 ==== Usage in Other Flakes / `shell.nix`
 
