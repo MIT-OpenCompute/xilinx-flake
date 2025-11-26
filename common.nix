@@ -9,6 +9,7 @@ pkgs:
   zlib
   lsb-release
   stdenv.cc.cc
+  ncurses
   ncurses5
   xorg.libXext
   xorg.libX11
@@ -17,6 +18,8 @@ pkgs:
   xorg.libXi
   xorg.libXft
   xorg.libxcb
+  pixman
+  libpng
   # common requirements
   freetype
   fontconfig

@@ -1,6 +1,8 @@
 = Xilinx for Nix users
 :source-highlighter: rouge
 
+forked from https://gitlab.com/asmir.abdulahovic/nix-xilinx - Adapted to run newer vivado versions
+
 This repo is a collection of files that should help Nix and NixOS users install
 Xilinx's software tools - Vivado & Vitis imperatively.
 
