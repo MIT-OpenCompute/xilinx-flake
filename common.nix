@@ -18,8 +18,6 @@ pkgs:
   xorg.libXi
   xorg.libXft
   xorg.libxcb
-  pixman
-  libpng
   # common requirements
   freetype
   fontconfig
@@ -29,6 +27,8 @@ pkgs:
   libxcrypt-legacy
   libdrm
   libgbm
+  pixman
+  libpng
   # For fetching project templates when creating projects
   gitMinimal
   # For the `arch` command
