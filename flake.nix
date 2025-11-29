@@ -178,7 +178,6 @@
           vitis
           vitis_hls
           model_composer
-          ncurses
           ;
       };
       inherit shellHooksCommon;
