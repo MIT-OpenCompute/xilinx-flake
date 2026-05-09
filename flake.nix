@@ -62,10 +62,28 @@
         { product, meta }:
         let
           name = pkgs.lib.strings.toLower product;
+          fhsEnv = pkgs.buildFHSEnv {
+            inherit name targetPkgs meta;
+            runScript = pkgs.writeScript "xilinx-${product}-runner" (
+              (runScriptPrefix { })
+              + ''
+                LD_LIBRARY_PATH=/lib:$LD_LIBRARY_PATH
+                if [[ -d $INSTALL_DIR/$VERSION/${product} ]]; then
+                  $INSTALL_DIR/$VERSION/${product}/bin/${name} "$@"
+                else
+                  echo It seems ${product} isn\'t installed because '$INSTALL_DIR/$VERSION/${product}' doesn\'t exist. Follow >&2
+                  echo the instructions in the README of nix-xilinx and make sure ${product} is selected during the >&2
+                  echo installation wizard. If it\'s supposed to be installed, check that your \~/.config/xilinx/nix.sh >&2
+                  echo have a correct '$VERSION' variable set in it - check that the '$VERSION' directory actually exists. >&2
+                  exit 1
+                fi
+              ''
+            );
+          };
           desktopItem = pkgs.makeDesktopItem {
             desktopName = product;
             inherit name;
-            exec = "@out@/bin/${name}";
+            exec = "${fhsEnv}/bin/${name}";
             icon = name;
             categories = [
               "Utility"
@@ -73,43 +91,28 @@
               "IDE"
             ];
           };
-          xdg_icon_cmd_prefix = "env XDG_DATA_HOME=$out/share ${pkgs.xdg-utils}/bin/xdg-icon-resource install --novendor --size $size --mode user";
+          iconPkgs = {
+            vivado = [
+              (pkgs.runCommand "${name}-icon" { } ''
+                install -Dm644 ${./icons/vivado.png} $out/share/icons/hicolor/256x256/apps/${name}.png
+              '')
+            ];
+            vitis_hls = [
+              (pkgs.runCommand "${name}-icon" { } ''
+                install -Dm644 ${./icons/vitis_hls.png} $out/share/icons/hicolor/256x256/apps/${name}.png
+              '')
+            ];
+            vitis = [ ];
+            model_composer = [
+              (pkgs.runCommand "${name}-icon" { } ''
+                install -Dm644 ${./icons/matlab.png} $out/share/icons/hicolor/256x256/apps/${name}.png
+              '')
+            ];
+          }.${name};
         in
-        pkgs.buildFHSEnv {
-          inherit name;
-          inherit targetPkgs;
-          runScript = pkgs.writeScript "xilinx-${product}-runner" (
-            (runScriptPrefix { })
-            + ''
-              	LD_LIBRARY_PATH=/lib:$LD_LIBRARY_PATH
-                      if [[ -d $INSTALL_DIR/$VERSION/${product} ]]; then
-                        $INSTALL_DIR/$VERSION/${product}/bin/${name} "$@"
-                      else
-                        echo It seems ${product} isn\'t installed because '$INSTALL_DIR/$VERSION/${product}' doesn\'t exist. Follow >&2
-                        echo the instructions in the README of nix-xilinx and make sure ${product} is selected during the >&2
-                        echo installation wizard. If it\'s supposed to be installed, check that your \~/.config/xilinx/nix.sh >&2
-                        echo have a correct '$VERSION' variable set in it - check that the '$VERSION' directory actually exists. >&2
-                        exit 1
-                      fi
-            ''
-          );
-          inherit meta;
-          # extraInstallCommands = ''
-          #   install -Dm644 ${desktopItem}/share/applications/${name}.desktop $out/share/applications/${name}.desktop
-          #   substituteInPlace $out/share/applications/${name}.desktop \
-          #     --replace "@out@" ${placeholder "out"}
-          #   for size in 64 256 512; do
-          #     ${
-          #       {
-          #         vivado = "${xdg_icon_cmd_prefix} ${./icons/vivado.png} ${name}";
-          #         vitis_hls = "${xdg_icon_cmd_prefix} ${./icons/vitis_hls.png} ${name}";
-          #         vitis = "echo nix-xilinx warning: No icon is available for product ${product} >&2";
-          #         model_composer = "${xdg_icon_cmd_prefix} ${./icons/matlab.png} ${name}";
-          #       }
-          #       .${name}
-          #     }
-          # done
-          # '';
+        pkgs.symlinkJoin {
+          inherit name meta;
+          paths = [ fhsEnv desktopItem ] ++ iconPkgs;
         };
     in
     {
