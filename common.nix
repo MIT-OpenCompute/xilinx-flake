@@ -11,13 +11,13 @@ pkgs:
   stdenv.cc.cc
   ncurses
   ncurses5
-  xorg.libXext
-  xorg.libX11
-  xorg.libXrender
-  xorg.libXtst
-  xorg.libXi
-  xorg.libXft
-  xorg.libxcb
+  libXext
+  libX11
+  libXrender
+  libXtst
+  libXi
+  libXft
+  libxcb
   # common requirements
   freetype
   fontconfig

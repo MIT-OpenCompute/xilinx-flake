@@ -69,6 +69,8 @@
               + ''
                 export LD_LIBRARY_PATH=/lib:$LD_LIBRARY_PATH
                 export GDK_BACKEND=x11
+                export DISPLAY="''${DISPLAY:-:0}"
+                export _JAVA_AWT_WM_NONREPARENTING=1
                 if [[ -d $INSTALL_DIR/$VERSION/${product} ]]; then
                   exec $INSTALL_DIR/$VERSION/${product}/bin/${name} "$@"
                 else
@@ -92,28 +94,34 @@
               "IDE"
             ];
           };
-          iconPkgs = {
-            vivado = [
-              (pkgs.runCommand "${name}-icon" { } ''
-                install -Dm644 ${./icons/vivado.png} $out/share/icons/hicolor/256x256/apps/${name}.png
-              '')
-            ];
-            vitis_hls = [
-              (pkgs.runCommand "${name}-icon" { } ''
-                install -Dm644 ${./icons/vitis_hls.png} $out/share/icons/hicolor/256x256/apps/${name}.png
-              '')
-            ];
-            vitis = [ ];
-            model_composer = [
-              (pkgs.runCommand "${name}-icon" { } ''
-                install -Dm644 ${./icons/matlab.png} $out/share/icons/hicolor/256x256/apps/${name}.png
-              '')
-            ];
-          }.${name};
+          iconPkgs =
+            {
+              vivado = [
+                (pkgs.runCommand "${name}-icon" { } ''
+                  install -Dm644 ${./icons/vivado.png} $out/share/icons/hicolor/256x256/apps/${name}.png
+                '')
+              ];
+              vitis_hls = [
+                (pkgs.runCommand "${name}-icon" { } ''
+                  install -Dm644 ${./icons/vitis_hls.png} $out/share/icons/hicolor/256x256/apps/${name}.png
+                '')
+              ];
+              vitis = [ ];
+              model_composer = [
+                (pkgs.runCommand "${name}-icon" { } ''
+                  install -Dm644 ${./icons/matlab.png} $out/share/icons/hicolor/256x256/apps/${name}.png
+                '')
+              ];
+            }
+            .${name};
         in
         pkgs.symlinkJoin {
           inherit name meta;
-          paths = [ fhsEnv desktopItem ] ++ iconPkgs;
+          paths = [
+            fhsEnv
+            desktopItem
+          ]
+          ++ iconPkgs;
         };
     in
     {
