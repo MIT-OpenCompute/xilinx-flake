@@ -27,8 +27,15 @@ pkgs:
   libxcrypt-legacy
   libdrm
   libgbm
+  mesa
+  libGL
   pixman
   libpng
+  xorg.libXxf86vm
+  xorg.libXcursor
+  xorg.libXrandr
+  xorg.libXfixes
+  xorg.libXcomposite
   # For fetching project templates when creating projects
   gitMinimal
   # For the `arch` command

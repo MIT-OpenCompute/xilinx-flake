@@ -67,9 +67,10 @@
             runScript = pkgs.writeScript "xilinx-${product}-runner" (
               (runScriptPrefix { })
               + ''
-                LD_LIBRARY_PATH=/lib:$LD_LIBRARY_PATH
+                export LD_LIBRARY_PATH=/lib:$LD_LIBRARY_PATH
+                export GDK_BACKEND=x11
                 if [[ -d $INSTALL_DIR/$VERSION/${product} ]]; then
-                  $INSTALL_DIR/$VERSION/${product}/bin/${name} "$@"
+                  exec $INSTALL_DIR/$VERSION/${product}/bin/${name} "$@"
                 else
                   echo It seems ${product} isn\'t installed because '$INSTALL_DIR/$VERSION/${product}' doesn\'t exist. Follow >&2
                   echo the instructions in the README of nix-xilinx and make sure ${product} is selected during the >&2
