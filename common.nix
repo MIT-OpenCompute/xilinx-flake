@@ -11,12 +11,12 @@ pkgs:
   stdenv.cc.cc
   ncurses
   ncurses5
-  libXext
-  libX11
-  libXrender
-  libXtst
-  libXi
-  libXft
+  libxext
+  libx11
+  libxrender
+  libxtst
+  libxi
+  libxft
   libxcb
   # common requirements
   freetype
@@ -31,11 +31,11 @@ pkgs:
   libGL
   pixman
   libpng
-  xorg.libXxf86vm
-  xorg.libXcursor
-  xorg.libXrandr
-  xorg.libXfixes
-  xorg.libXcomposite
+  libxxf86vm
+  libxcursor
+  libxrandr
+  libxfixes
+  libxcomposite
   # For fetching project templates when creating projects
   gitMinimal
   # For the `arch` command
