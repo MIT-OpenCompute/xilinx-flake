@@ -184,6 +184,193 @@ pkgs.mkShell {
 Note that xilinx' tools still need to be installed in a user-writeable location
 for this `shellHook` to work, as explained xref:#user-content-install[here].
 
+== Headless Server Module
+
+This flake also ships a NixOS module that runs the standard Xilinx server
+daemons as systemd services.  Server machines can expose Vivado's
+hardware-manager, floating-license, and ChipScope capabilities to the network
+without installing a full desktop environment.
+
+The three services map directly to what Xilinx ships:
+
+[cols="1,1,3"]
+|===
+|Service |Default port |Purpose
+
+|`xilinx-hw-server`
+|**3121** TCP
+|JTAG hardware target server. Remote Vivado Hardware Manager sessions connect
+here to program and debug FPGAs. This is the same daemon you launch with
+`hw_server` on any Linux workstation.
+
+|`xilinx-lmgrd`
+|**27000** TCP + vendor port
+|FlexLM floating licence server. Clients set
+`XILINXD_LICENSE_FILE=@<server>` to check out tool licences from the network.
+
+|`xilinx-cs-server`
+|**3042** TCP
+|ChipScope / ILA analysis server. Used by Vivado Hardware Manager for
+in-system logic analysis over a network connection.
+|===
+
+=== Adding the module to a server flake
+
+[source,nix]
+----
+# flake.nix on the server machine
+{
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    xilinx-flake.url = "github:MIT-OpenCompute/xilinx-flake";
+  };
+
+  outputs = { self, nixpkgs, xilinx-flake }: {
+    nixosConfigurations.my-fpga-server = nixpkgs.lib.nixosSystem {
+      system = "x86_64-linux";
+      modules = [
+        xilinx-flake.nixosModules.vivado-server
+        ./configuration.nix
+      ];
+    };
+  };
+}
+----
+
+=== Configuring the services
+
+Add the following to the server's `configuration.nix` (or any imported module):
+
+[source,nix]
+----
+services.vivadoServer = {
+  enable = true;
+
+  # Path to the Xilinx imperative installation on this machine
+  installDir = "/opt/Xilinx";
+  version    = "2025.2";    # must match the installed release directory
+
+  # hw_server — remote JTAG / Hardware Manager
+  hwServer = {
+    enable      = true;
+    port        = 3121;      # Xilinx default, clients expect this
+    openFirewall = true;
+  };
+
+  # lmgrd — floating licence server
+  licenseServer = {
+    enable      = true;
+    port        = 27000;     # FlexLM default
+    vendorPort  = 27001;     # must match "VENDOR xilinxd port=27001" in the .lic
+    licenseFile = /etc/xilinx/Xilinx.lic;
+    openFirewall = true;
+  };
+
+  # cs_server — ChipScope / ILA (optional)
+  csServer = {
+    enable      = true;
+    port        = 3042;
+    openFirewall = true;
+  };
+};
+----
+
+NOTE: `installDir` must point to a Xilinx installation already present on the
+server's filesystem.  The Nix module does not install Vivado — follow the
+<<Install>> section above to perform the imperative installation first, then
+point this option at the result.
+
+==== License file vendor port
+
+The FlexLM vendor daemon (`xilinxd`) picks its port from the license file.
+Add a fixed port line so that `openFirewall = true` can open the right port:
+
+....
+SERVER my-fpga-server 000000000000 27000
+VENDOR xilinxd port=27001
+...
+....
+
+=== Connecting from a client workstation
+
+After the server is running, configure client machines:
+
+[source,sh]
+----
+# Connect Vivado Hardware Manager to a remote hw_server
+# In Vivado Tcl console or batch script:
+open_hw_manager
+connect_hw_server -url my-fpga-server:3121
+
+# Point all Vivado instances at the floating licence server
+export XILINXD_LICENSE_FILE=@my-fpga-server
+----
+
+=== Nginx stream proxy
+
+Because `hw_server`, `lmgrd`, and `cs_server` all speak raw TCP (not HTTP),
+nginx must be configured with the `stream` module to proxy them.  This is
+useful for TLS termination, access control, or exposing a single public IP.
+
+In NixOS, `services.nginx.streamConfig` appends raw nginx config inside the
+`stream {}` block:
+
+[source,nix]
+----
+services.nginx = {
+  enable = true;
+
+  # The stream block is separate from the http block.
+  streamConfig = ''
+    # hw_server — Vivado Hardware Manager remote target
+    upstream xilinx_hw {
+      server 127.0.0.1:3121;
+    }
+    server {
+      listen 3121;
+      proxy_pass xilinx_hw;
+      proxy_timeout 1d;      # synthesis runs can be long
+      proxy_connect_timeout 10s;
+    }
+
+    # lmgrd — FlexLM licence daemon
+    upstream xilinx_lic {
+      server 127.0.0.1:27000;
+    }
+    server {
+      listen 27000;
+      proxy_pass xilinx_lic;
+    }
+
+    # lmgrd vendor daemon (xilinxd) — must match vendorPort option
+    upstream xilinx_vendor {
+      server 127.0.0.1:27001;
+    }
+    server {
+      listen 27001;
+      proxy_pass xilinx_vendor;
+    }
+
+    # cs_server — ChipScope / ILA
+    upstream xilinx_cs {
+      server 127.0.0.1:3042;
+    }
+    server {
+      listen 3042;
+      proxy_pass xilinx_cs;
+    }
+  '';
+};
+
+# Ensure nginx can bind the non-HTTP ports
+networking.firewall.allowedTCPPorts = [ 3121 27000 27001 3042 ];
+----
+
+NOTE: When using nginx as a TCP proxy for `lmgrd`, **both** the lmgrd port
+(27000) and the vendor daemon port (27001) must be proxied.  FlexLM clients
+make two separate connections — one to lmgrd to locate the vendor daemon, and
+a second directly to the vendor daemon port.
+
 == Previous work / Credits
 
 This repository is mostly copy paste from

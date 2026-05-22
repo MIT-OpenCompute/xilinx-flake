@@ -192,6 +192,7 @@
           model_composer
           ;
       };
+      nixosModules.vivado-server = import ./modules/vivado-server.nix;
       inherit shellHooksCommon;
       devShell.x86_64-linux = pkgs.mkShell {
         buildInputs = (targetPkgs pkgs) ++ [
