@@ -288,6 +288,19 @@ services.vivadoServer = {
     licenseFile = "@localhost";
     openFirewall = true;   # opens port 22 if not already open
   };
+
+  # hdlBuild — CLI batch build host for the ichika workflow
+  # (see "ichika CLI workflow" section below)
+  hdlBuild = {
+    enable      = true;
+    # Paste the SSH public key from each developer's machine.
+    authorizedKeys = [
+      "ssh-ed25519 AAAA... dev@laptop"
+    ];
+    workDir     = "/var/lib/vivado-remote";
+    licenseFile = "@localhost";   # omit or null if no local license server
+    openFirewall = true;
+  };
 };
 ----
 
@@ -372,6 +385,118 @@ NOTE: Vivado invokes the remote command as `bash --login -c "vivado -mode
 batch ..."`.  The module injects the FHS-wrapped `vivado` binary into PATH
 via `/etc/profile.d/xilinx-remote-runs.sh`, which is sourced by all login
 shells including non-interactive SSH sessions initiated this way.
+
+[[ichika-cli-workflow]]
+=== ichika CLI workflow
+
+The **ichika** flake (`github:kaitotlex/ichika`) provides a lightweight
+alternative to the Vivado GUI remote-run workflow.  Developers write HDL in
+any editor, and a pair of `nix run` commands handle all communication with
+the build server — no Vivado GUI required on the client machine.
+
+==== Server prerequisites
+
+Enable `services.vivadoServer.hdlBuild` as shown in the configuration
+example above and rebuild the server:
+
+[source,sh]
+----
+nixos-rebuild switch
+----
+
+The module will:
+
+* Create or update the `vivado` system user with a login shell.
+* Install the provided SSH public keys as `authorized_keys`.
+* Place a FHS-wrapped `vivado` binary in PATH for all login shells.
+* Create the build working directory (`workDir`).
+
+==== Client project setup
+
+From any HDL project directory, initialise an ichika-aware flake:
+
+[source,sh]
+----
+nix flake init -t github:kaitotlex/ichika
+----
+
+Edit the generated `flake.nix` to set your `top` module name, FPGA `part`
+string, RTL source directories, and server address:
+
+[source,nix]
+----
+hdlApps = ichika.lib.makeHdlApps {
+  inherit pkgs;
+  top         = "my_top";               # Verilog top module
+  part        = "xczu3eg-sfvc784-1-e";  # FPGA part string
+  rtlDirs     = [ "rtl" ];              # relative dirs rsync'd from $PWD
+  serverLocal = "10.0.0.228";           # LAN IP
+  # serverDns  = "build.example.com";   # optional public DNS name
+};
+----
+
+Or add ichika to an existing project's flake inputs and call `makeHdlApps`
+inside `eachDefaultSystem`.
+
+==== Running a build
+
+[source,sh]
+----
+# Run synthesis only (useful for checking for synthesis errors quickly)
+nix run .#synthesize
+
+# Run the full pipeline: synthesis → opt → place → route → bitstream
+# Copies <top>.bit to the current directory when done
+nix run .#run-impl
+----
+
+Both commands rsync whatever is currently in the configured `rtlDirs` on
+disk — **no `nix build` is required** to pick up source edits.
+
+==== Switching between local and DNS addresses
+
+[source,sh]
+----
+# Default: uses serverLocal (LAN IP)
+nix run .#run-impl
+
+# Override with an explicit address
+ICHIKA_SERVER=build.example.com nix run .#run-impl
+
+# Use serverDns (if configured in the flake)
+ICHIKA_USE_DNS=1 nix run .#run-impl
+----
+
+==== `hdlBuild` module options
+
+[cols="2,1,3"]
+|===
+|Option |Default |Description
+
+|`hdlBuild.enable`
+|`false`
+|Enable the SSH-based CLI batch build host.
+
+|`hdlBuild.authorizedKeys`
+|`[]`
+|SSH public keys for developer machines submitting ichika builds.
+
+|`hdlBuild.workDir`
+|`/var/lib/vivado-remote`
+|Base directory for per-project build artifacts.  ichika creates a
+sub-directory per top module name here.
+
+|`hdlBuild.licenseFile`
+|`null`
+|`XILINXD_LICENSE_FILE` injected into batch Vivado processes.  Set to
+`@localhost` when `licenseServer.enable = true`.  Falls back to the
+`remoteRuns.licenseFile` value if that service is also enabled.
+
+|`hdlBuild.openFirewall`
+|`false`
+|Opens SSH port 22 in the firewall.  Shared with `remoteRuns.openFirewall`
+— either flag being true opens the port.
+|===
 
 === Nginx stream proxy
 

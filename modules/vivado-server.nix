@@ -10,6 +10,7 @@ let
     mkMerge
     mkOption
     optional
+    optionals
     optionalAttrs
     optionalString
     types;
@@ -52,6 +53,15 @@ let
     "LANG=en_US.UTF-8"
   ];
 
+  # Effective license file for the batch vivado wrapper.
+  # remoteRuns takes precedence; hdlBuild is the fallback.
+  effectiveLicenseFile =
+    if cfg.remoteRuns.enable && cfg.remoteRuns.licenseFile != null
+      then cfg.remoteRuns.licenseFile
+    else if cfg.hdlBuild.enable && cfg.hdlBuild.licenseFile != null
+      then cfg.hdlBuild.licenseFile
+    else null;
+
   # FHS wrapper for Vivado batch/headless use.  Uses installDir/version
   # directly — no ~/.config/xilinx/nix.sh needed on the server.
   # Named "vivado-remote-fhs" to avoid colliding with the overlay "vivado"
@@ -66,8 +76,8 @@ let
         export LD_LIBRARY_PATH=/lib:$LD_LIBRARY_PATH
         export _JAVA_AWT_WM_NONREPARENTING=1
       ''
-      + optionalString (cfg.remoteRuns.licenseFile != null) ''
-        export XILINXD_LICENSE_FILE=${cfg.remoteRuns.licenseFile}
+      + optionalString (effectiveLicenseFile != null) ''
+        export XILINXD_LICENSE_FILE=${effectiveLicenseFile}
       ''
       + ''
         exec ${vivadoBin}/vivado "$@"
@@ -230,6 +240,53 @@ in
 
       openFirewall = mkEnableOption "open the firewall for SSH (port 22)";
     };
+
+    hdlBuild = {
+      enable = mkEnableOption ''
+        SSH-based CLI HDL batch build host for the ichika workflow.
+        Clients running <literal>nix run .#synthesize</literal> or
+        <literal>nix run .#run-impl</literal> will rsync HDL sources to this
+        server and invoke <literal>vivado -mode batch</literal> over SSH to
+        run synthesis and implementation, then retrieve the bitstream
+      '';
+
+      authorizedKeys = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        example = [ "ssh-ed25519 AAAA... dev@laptop" ];
+        description = ''
+          SSH public keys for clients submitting CLI batch builds via ichika.
+          Add one entry per developer workstation.
+        '';
+      };
+
+      workDir = mkOption {
+        type = types.str;
+        default = "/var/lib/vivado-remote";
+        description = ''
+          Base directory for per-project build artifacts on the server.
+          ichika creates a sub-directory per top module name here.
+        '';
+      };
+
+      licenseFile = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "@localhost";
+        description = ''
+          Value for <literal>XILINXD_LICENSE_FILE</literal> injected into every
+          batch Vivado process launched by an ichika build.  Set to
+          <literal>@localhost</literal> when
+          <option>services.vivadoServer.licenseServer.enable</option> is true,
+          or to <literal>@licence-server-hostname</literal> for an external
+          license server.  Takes effect only when
+          <option>services.vivadoServer.remoteRuns.licenseFile</option> is null.
+          Defaults to null (inherits the SSH session environment).
+        '';
+      };
+
+      openFirewall = mkEnableOption "open the firewall for SSH (port 22)";
+    };
   };
 
   config = mkIf cfg.enable (mkMerge [
@@ -357,33 +414,38 @@ in
     })
 
     # -------------------------------------------------------------------------
-    # remoteRuns — SSH-based remote synthesis / implementation host
+    # Shared SSH setup — remoteRuns and hdlBuild both need SSH access to the
+    # vivado user with vivado in PATH.  Merged here to avoid attribute conflicts.
     # -------------------------------------------------------------------------
-    (mkIf cfg.remoteRuns.enable {
-      # Give the daemon user a login shell and SSH authorized keys so Vivado
-      # can connect and invoke "vivado -mode batch" non-interactively.
+    (mkIf (cfg.remoteRuns.enable || cfg.hdlBuild.enable) {
+      # Give the daemon user a login shell and SSH authorized keys so clients
+      # can connect and invoke vivado non-interactively.
       users.users.${cfg.user} = {
         shell = pkgs.bash;
-        openssh.authorizedKeys.keys = cfg.remoteRuns.authorizedKeys;
+        openssh.authorizedKeys.keys =
+          optionals cfg.remoteRuns.enable cfg.remoteRuns.authorizedKeys
+          ++ optionals cfg.hdlBuild.enable cfg.hdlBuild.authorizedKeys;
       };
 
-      # The sshd must be running for Vivado to reach this host.
       services.openssh.enable = mkDefault true;
 
       # Inject the vivado batch wrapper into PATH for login shells.
-      # Vivado invokes remote commands as "bash --login -c '...'" so
-      # /etc/profile.d/ is sourced before the vivado command runs.
+      # Both remoteRuns and hdlBuild invoke remote commands as
+      # "bash --login -c '...'" so /etc/profile.d/ is sourced first.
       environment.etc."profile.d/xilinx-remote-runs.sh".text = ''
         export PATH="${vivadoRemote}/bin:$PATH"
       '';
 
-      # Create the remote run working directory with correct ownership.
-      systemd.tmpfiles.rules = [
-        "d ${cfg.remoteRuns.workDir} 0750 ${cfg.user} ${cfg.group} -"
-      ];
+      # Create working directories with correct ownership.
+      systemd.tmpfiles.rules =
+        optional cfg.remoteRuns.enable
+          "d ${cfg.remoteRuns.workDir} 0750 ${cfg.user} ${cfg.group} -"
+        ++ optional cfg.hdlBuild.enable
+          "d ${cfg.hdlBuild.workDir}  0750 ${cfg.user} ${cfg.group} -";
 
+      # Open SSH port 22 if either service requests it.
       networking.firewall.allowedTCPPorts =
-        optional cfg.remoteRuns.openFirewall 22;
+        optional (cfg.remoteRuns.openFirewall || cfg.hdlBuild.openFirewall) 22;
     })
   ]);
 }
