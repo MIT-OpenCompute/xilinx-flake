@@ -4,11 +4,14 @@ let
   inherit (lib)
     flatten
     literalExpression
+    mkDefault
     mkEnableOption
     mkIf
     mkMerge
     mkOption
     optional
+    optionalAttrs
+    optionalString
     types;
 
   cfg = config.services.vivadoServer;
@@ -41,13 +44,43 @@ let
     exec ${vivadoBin}/cs_server "$@"
   '';
 
-  # Environment variables required by all Vivado server processes
+  # Environment variables required by all Vivado server processes.
   commonEnv = [
     "XILINX_VIVADO=${cfg.installDir}/${cfg.version}/Vivado"
     "LD_LIBRARY_PATH=/lib"
     "LC_ALL=en_US.UTF-8"
     "LANG=en_US.UTF-8"
   ];
+
+  # FHS wrapper for Vivado batch/headless use.  Uses installDir/version
+  # directly — no ~/.config/xilinx/nix.sh needed on the server.
+  # Named "vivado-remote-fhs" to avoid colliding with the overlay "vivado"
+  # package if both happen to be in environment.systemPackages.
+  vivadoRemoteFhs = pkgs.buildFHSEnv {
+    name = "vivado-remote-fhs";
+    inherit targetPkgs;
+    runScript = pkgs.writeScript "vivado-batch-runner" (
+      ''
+        #!/bin/sh
+        export XILINX_VIVADO=${cfg.installDir}/${cfg.version}/Vivado
+        export LD_LIBRARY_PATH=/lib:$LD_LIBRARY_PATH
+        export _JAVA_AWT_WM_NONREPARENTING=1
+      ''
+      + optionalString (cfg.remoteRuns.licenseFile != null) ''
+        export XILINXD_LICENSE_FILE=${cfg.remoteRuns.licenseFile}
+      ''
+      + ''
+        exec ${vivadoBin}/vivado "$@"
+      ''
+    );
+  };
+
+  # Thin wrapper package that exposes the binary under the name "vivado"
+  # so it can be injected into PATH without touching environment.systemPackages.
+  vivadoRemote = pkgs.runCommand "vivado-remote" { } ''
+    mkdir -p $out/bin
+    ln -s ${vivadoRemoteFhs}/bin/vivado-remote-fhs $out/bin/vivado
+  '';
 
 in
 {
@@ -151,17 +184,67 @@ in
 
       openFirewall = mkEnableOption "open the firewall for the cs_server port";
     };
+
+    remoteRuns = {
+      enable = mkEnableOption ''
+        SSH remote-run host for Vivado's "Launch runs on remote hosts" feature.
+        Vivado on a client workstation will SSH into this server as
+        <option>services.vivadoServer.user</option> and invoke
+        <literal>vivado -mode batch</literal> to run synthesis and implementation
+        jobs without a GUI on the client
+      '';
+
+      authorizedKeys = mkOption {
+        type = types.listOf types.str;
+        default = [ ];
+        example = [ "ssh-ed25519 AAAA... engineer@workstation" ];
+        description = ''
+          SSH public keys that are permitted to connect as the Vivado daemon
+          user and submit remote runs.  Add one entry per client workstation.
+        '';
+      };
+
+      workDir = mkOption {
+        type = types.str;
+        default = "/var/lib/vivado-remote";
+        description = ''
+          Directory on the server where Vivado places run artifacts (checkpoints,
+          logs, reports).  Configure this path as the "Remote working directory"
+          in Vivado's "Configure Hosts" dialog.
+        '';
+      };
+
+      licenseFile = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        example = "@localhost";
+        description = ''
+          Value for <literal>XILINXD_LICENSE_FILE</literal> injected into every
+          batch Vivado process spawned by a remote run.  Set to
+          <literal>@localhost</literal> when
+          <option>services.vivadoServer.licenseServer.enable</option> is true on
+          this machine, or to <literal>@licence-server-hostname</literal> for an
+          external server.  Defaults to null (inherits the SSH session environment).
+        '';
+      };
+
+      openFirewall = mkEnableOption "open the firewall for SSH (port 22)";
+    };
   };
 
   config = mkIf cfg.enable (mkMerge [
     # -------------------------------------------------------------------------
     # Shared: user + group
+    # Always create a home directory so SSH authorized_keys and Vivado's
+    # per-user cache (~/.Xilinx/) have a writable location.
     # -------------------------------------------------------------------------
     {
       users.users.${cfg.user} = {
         isSystemUser = true;
         group = cfg.group;
         description = "Xilinx Vivado daemon user";
+        home = "/var/lib/vivado";
+        createHome = true;
       };
       users.groups.${cfg.group} = { };
     }
@@ -271,6 +354,36 @@ in
 
       networking.firewall.allowedTCPPorts =
         optional cfg.csServer.openFirewall cfg.csServer.port;
+    })
+
+    # -------------------------------------------------------------------------
+    # remoteRuns — SSH-based remote synthesis / implementation host
+    # -------------------------------------------------------------------------
+    (mkIf cfg.remoteRuns.enable {
+      # Give the daemon user a login shell and SSH authorized keys so Vivado
+      # can connect and invoke "vivado -mode batch" non-interactively.
+      users.users.${cfg.user} = {
+        shell = pkgs.bash;
+        openssh.authorizedKeys.keys = cfg.remoteRuns.authorizedKeys;
+      };
+
+      # The sshd must be running for Vivado to reach this host.
+      services.openssh.enable = mkDefault true;
+
+      # Inject the vivado batch wrapper into PATH for login shells.
+      # Vivado invokes remote commands as "bash --login -c '...'" so
+      # /etc/profile.d/ is sourced before the vivado command runs.
+      environment.etc."profile.d/xilinx-remote-runs.sh".text = ''
+        export PATH="${vivadoRemote}/bin:$PATH"
+      '';
+
+      # Create the remote run working directory with correct ownership.
+      systemd.tmpfiles.rules = [
+        "d ${cfg.remoteRuns.workDir} 0750 ${cfg.user} ${cfg.group} -"
+      ];
+
+      networking.firewall.allowedTCPPorts =
+        optional cfg.remoteRuns.openFirewall 22;
     })
   ]);
 }

@@ -272,6 +272,22 @@ services.vivadoServer = {
     port        = 3042;
     openFirewall = true;
   };
+
+  # remoteRuns — SSH host for "Launch runs on remote hosts"
+  remoteRuns = {
+    enable      = true;
+    # Paste the SSH public key from each client workstation that will
+    # submit synthesis / implementation jobs via the Vivado dialog.
+    authorizedKeys = [
+      "ssh-ed25519 AAAA... engineer@workstation"
+    ];
+    # This directory is what you enter in Vivado's "Configure Hosts"
+    # dialog under "Remote working directory".
+    workDir     = "/var/lib/vivado-remote";
+    # "@localhost" works when licenseServer.enable = true on this machine.
+    licenseFile = "@localhost";
+    openFirewall = true;   # opens port 22 if not already open
+  };
 };
 ----
 
@@ -305,6 +321,57 @@ connect_hw_server -url my-fpga-server:3121
 # Point all Vivado instances at the floating licence server
 export XILINXD_LICENSE_FILE=@my-fpga-server
 ----
+
+==== Remote synthesis and implementation (GUI workflow)
+
+This corresponds to the **"Launch runs on remote hosts"** option in Vivado's
+_Run Settings_ dialog (_Flow → Run Settings_ or right-click a run in the
+_Design Runs_ panel).
+
+. Generate an SSH key pair on the client workstation if you do not already
+  have one:
++
+....
+ssh-keygen -t ed25519 -f ~/.ssh/id_vivado_remote
+....
+
+. Add the **public** key (`~/.ssh/id_vivado_remote.pub`) to
+  `services.vivadoServer.remoteRuns.authorizedKeys` in the server's NixOS
+  configuration and rebuild.
+
+. In Vivado, open _Tools → Options → Remote Hosts_ (or click
+  *Configure Hosts* in the Launch Runs dialog) and add a new host:
++
+[cols="1,2"]
+|===
+|Field |Value
+
+|Hostname
+|`my-fpga-server` (or IP address)
+
+|Username
+|`vivado` (value of `services.vivadoServer.user`)
+
+|SSH private key
+|`~/.ssh/id_vivado_remote`
+
+|Remote Vivado installation
+|Leave blank — the module puts `vivado` in PATH automatically
+
+|Remote working directory
+|Value of `services.vivadoServer.remoteRuns.workDir`
+(default: `/var/lib/vivado-remote`)
+|===
+
+. Select *Launch runs on remote hosts* in the Run Settings dialog, choose the
+  host you configured, and click *OK*.  Vivado will SSH into the server and
+  run synthesis/implementation in batch mode there; results are copied back
+  automatically.
+
+NOTE: Vivado invokes the remote command as `bash --login -c "vivado -mode
+batch ..."`.  The module injects the FHS-wrapped `vivado` binary into PATH
+via `/etc/profile.d/xilinx-remote-runs.sh`, which is sourced by all login
+shells including non-interactive SSH sessions initiated this way.
 
 === Nginx stream proxy
 
