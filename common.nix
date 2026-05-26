@@ -51,4 +51,17 @@ pkgs:
   gcc
   unzip
   nettools
+
+  nss
+  nspr
+  dbus.lib
+  at-spi2-core
+  cups.lib
+  pango
+  cairo
+  libxdamage
+  expat
+  libxkbcommon
+  alsa-lib
+  nodejs_22
 ])

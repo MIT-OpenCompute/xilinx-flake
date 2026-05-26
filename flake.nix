@@ -71,6 +71,12 @@
                 export GDK_BACKEND=x11
                 export DISPLAY="''${DISPLAY:-:0}"
                 export _JAVA_AWT_WM_NONREPARENTING=1
+                export ELECTRON_OZONE_PLATFORM_HINT=x11
+                _xil_tmpdir=$(mktemp -d -t xilinx-node-XXXXXX)
+                printf '#!/bin/sh\nexport LD_LIBRARY_PATH=/lib64:$LD_LIBRARY_PATH\nexec /usr/bin/node "$@"\n' \
+                  > "$_xil_tmpdir/node"
+                chmod +x "$_xil_tmpdir/node"
+                export PATH="$_xil_tmpdir:$PATH"
                 if [[ -d $INSTALL_DIR/$VERSION/${product} ]]; then
                   exec $INSTALL_DIR/$VERSION/${product}/bin/${name} "$@"
                 else
@@ -183,6 +189,21 @@
           description = "A Xilinx toolbox for MATLAB and Simulink for DSP Design";
         };
       };
+      packages.x86_64-linux.xsct = pkgs.buildFHSEnv {
+        name = "xsct";
+        inherit targetPkgs;
+        runScript = pkgs.writeScript "xilinx-xsct-runner" (
+          (runScriptPrefix { })
+          + ''
+            export LD_LIBRARY_PATH=/lib:$LD_LIBRARY_PATH
+            export XILINX_VIVADO="$INSTALL_DIR/$VERSION/Vivado"
+            exec "$INSTALL_DIR/$VERSION/Vivado/bin/xsdb" "$@"
+          ''
+        );
+        meta = metaCommon // {
+          description = "Xilinx Software Command-line Tool (xsct/xsdb)";
+        };
+      };
       overlay = final: prev: {
         inherit (self.packages.x86_64-linux)
           xilinx-shell
@@ -190,6 +211,7 @@
           vitis
           vitis_hls
           model_composer
+          xsct
           ;
       };
       nixosModules.vivado-server = import ./modules/vivado-server.nix;
