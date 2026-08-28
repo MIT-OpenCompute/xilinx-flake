@@ -79,6 +79,22 @@ nix run github:MIT-OpenCompute/xilinx-flake#vivado
 
 Use `nix search github:MIT-OpenCompute/xilinx-flake` to view all other packages defined.
 
+==== Fixing app launcher / drun entries
+
+If you enabled desktop shortcuts in the installer (`CreateDesktopShortcuts` /
+`CreateProgramGroupShortcuts` in `install_config.txt`), Xilinx's own installer
+drops `.desktop` files in `~/.local/share/applications/` and `~/Desktop/`
+whose `Exec=` points straight at the raw, unwrapped binary under
+`$INSTALL_DIR`. That binary isn't runnable outside the FHS environment this
+flake builds, so launching it from an app launcher (drun, GNOME/KDE menus,
+etc.) silently fails - no error is shown, nothing happens. Run this after
+installing or re-installing to repoint those shortcuts at the Nix-wrapped
+executables instead:
+
+....
+nix run github:MIT-OpenCompute/xilinx-flake#fix-desktop-entries
+....
+
 It's likely you'd like to make the FHS environment survive garbage
 collections and add a desktop launcher to your system. To do that you can
 follow one of the following paths according to your setup.

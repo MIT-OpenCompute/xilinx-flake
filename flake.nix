@@ -161,6 +161,63 @@
           ]
           ++ iconPkgs;
         };
+
+      xilinxVendorShortcutMap = with self.packages.x86_64-linux; [
+        {
+          rel = "Vivado/bin/vivado";
+          wrapped = "${vivado}/bin/vivado";
+        }
+        {
+          rel = "Vivado/bin/vlm";
+          wrapped = "${vlm}/bin/vlm";
+        }
+        {
+          rel = "Vitis/bin/vitis";
+          wrapped = "${vitis}/bin/vitis";
+        }
+        {
+          rel = "Vitis_HLS/bin/vitis_hls";
+          wrapped = "${vitis_hls}/bin/vitis_hls";
+        }
+        {
+          rel = "Model_Composer/bin/model_composer";
+          wrapped = "${model_composer}/bin/model_composer";
+        }
+      ];
+
+      fixDesktopEntriesScript = pkgs.writeShellApplication {
+        name = "fix-desktop-entries";
+        runtimeInputs = with pkgs; [
+          gnused
+          gnugrep
+          coreutils
+        ];
+        excludeShellChecks = [ "SC1090" ];
+        text =
+          (runScriptPrefix { errorOut = true; })
+          + ''
+            shopt -s nullglob
+            fixed=0
+            for f in "$HOME/.local/share/applications"/*.desktop "$HOME/Desktop"/*.desktop; do
+          ''
+          + pkgs.lib.concatMapStringsSep "\n" (e: ''
+            if grep -q "$INSTALL_DIR/$VERSION/${e.rel}" "$f" 2>/dev/null; then
+              sed -i "s#$INSTALL_DIR/$VERSION/${e.rel}#${e.wrapped}#g" "$f"
+              fixed=$((fixed + 1))
+            fi
+          '') xilinxVendorShortcutMap
+          + ''
+            done
+            if [[ $fixed -eq 0 ]]; then
+              echo "nix-xilinx: no vendor-generated desktop entries needed fixing"
+            else
+              echo "nix-xilinx: fixed $fixed desktop entrie(s) to launch through the Nix FHS wrapper"
+            fi
+          '';
+        meta = metaCommon // {
+          description = "Repoints Xilinx-installer-generated .desktop shortcuts at the Nix-wrapped executables";
+        };
+      };
     in
     {
       packages.x86_64-linux.xilinx-shell = pkgs.buildFHSEnv {
@@ -247,6 +304,7 @@
           description = "Xilinx Software Command-line Tool (xsct/xsdb)";
         };
       };
+      packages.x86_64-linux.fix-desktop-entries = fixDesktopEntriesScript;
       overlay = final: prev: {
         inherit (self.packages.x86_64-linux)
           xilinx-shell
@@ -256,6 +314,7 @@
           vitis_hls
           model_composer
           xsct
+          fix-desktop-entries
           ;
       };
       nixosModules.vivado-server = import ./modules/vivado-server.nix;
