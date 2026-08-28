@@ -18,6 +18,15 @@
       # supported
       pkgs = nixpkgs.legacyPackages.x86_64-linux;
       targetPkgs = import ./common.nix;
+      # lmutil/lmgrd/xilinxd (the FlexLM binaries Xilinx ships under
+      # bin/unwrapped/lnx64.o/) are linked against /lib64/ld-lsb-x86-64.so.3,
+      # the LSB-compat dynamic loader that real distros' lsb-release packages
+      # symlink to the regular one. buildFHSEnv never creates it, so those
+      # binaries fail to exec at all inside the sandbox ("required file not
+      # found"), which is what shows up as "lmutil not found" in xlicdiag/vlm.
+      fhsExtraBuildCommands = ''
+        ln -sf ld-linux-x86-64.so.2 "$out/usr/lib64/ld-lsb-x86-64.so.3"
+      '';
       runScriptPrefix =
         {
           errorOut ? true,
@@ -37,6 +46,12 @@
             exit 2
         ''
         + ''
+          fi
+          # XILINXD_LICENSE_FILE may come from ~/.config/xilinx/nix.sh (e.g.
+          # "@license-server" or "/path/to/Xilinx.lic"), or already be set in
+          # the calling shell - forward it into the tool's environment either way.
+          if [[ -n "''${XILINXD_LICENSE_FILE:-}" ]]; then
+            export XILINXD_LICENSE_FILE
           fi
         '';
       # Might be useful for usage of this flake in another flake with devShell +
@@ -59,11 +74,21 @@
       };
 
       createXilinxPkg =
-        { product, meta }:
+        {
+          product,
+          # Executable name under $INSTALL_DIR/$VERSION/${product}/bin/, if it
+          # differs from the lowercased product dir name (e.g. the License
+          # Manager binary "vlm" lives under the "Vivado" product dir).
+          binary ? null,
+          # Desktop entry name, if it should differ from the product dir name.
+          desktopName ? product,
+          meta,
+        }:
         let
-          name = pkgs.lib.strings.toLower product;
+          name = if binary != null then binary else pkgs.lib.strings.toLower product;
           fhsEnv = pkgs.buildFHSEnv {
             inherit name targetPkgs meta;
+            extraBuildCommands = fhsExtraBuildCommands;
             runScript = pkgs.writeScript "xilinx-${product}-runner" (
               (runScriptPrefix { })
               + ''
@@ -76,7 +101,10 @@
                 printf '#!/bin/sh\nexport LD_LIBRARY_PATH=/lib64:$LD_LIBRARY_PATH\nexec /usr/bin/node "$@"\n' \
                   > "$_xil_tmpdir/node"
                 chmod +x "$_xil_tmpdir/node"
-                export PATH="$_xil_tmpdir:$PATH"
+                # lmutil/lmgrd/xilinxd (FlexLM tools, e.g. the ones vlm shells
+                # out to for license status) live in the raw ELF dir, not on
+                # PATH by default.
+                export PATH="$_xil_tmpdir:$INSTALL_DIR/$VERSION/${product}/bin:$INSTALL_DIR/$VERSION/${product}/bin/unwrapped/lnx64.o:$PATH"
                 if [[ -d $INSTALL_DIR/$VERSION/${product} ]]; then
                   exec $INSTALL_DIR/$VERSION/${product}/bin/${name} "$@"
                 else
@@ -90,8 +118,7 @@
             );
           };
           desktopItem = pkgs.makeDesktopItem {
-            desktopName = product;
-            inherit name;
+            inherit desktopName name;
             exec = "${fhsEnv}/bin/${name}";
             icon = name;
             categories = [
@@ -103,6 +130,11 @@
           iconPkgs =
             {
               vivado = [
+                (pkgs.runCommand "${name}-icon" { } ''
+                  install -Dm644 ${./icons/vivado.png} $out/share/icons/hicolor/256x256/apps/${name}.png
+                '')
+              ];
+              vlm = [
                 (pkgs.runCommand "${name}-icon" { } ''
                   install -Dm644 ${./icons/vivado.png} $out/share/icons/hicolor/256x256/apps/${name}.png
                 '')
@@ -134,6 +166,7 @@
       packages.x86_64-linux.xilinx-shell = pkgs.buildFHSEnv {
         name = "xilinx-shell";
         inherit targetPkgs;
+        extraBuildCommands = fhsExtraBuildCommands;
         runScript = pkgs.writeScript "xilinx-shell-runner" (
           (runScriptPrefix {
             # If the user hasn't setup a ~/.config/xilinx/nix.sh file yet, don't
@@ -168,6 +201,15 @@
           description = "Software suite for synthesis and analysis of (HDL) designs";
         };
       };
+      packages.x86_64-linux.vlm = createXilinxPkg {
+        product = "Vivado";
+        binary = "vlm";
+        desktopName = "Vivado License Manager";
+        meta = metaCommon // {
+          homepage = "https://docs.amd.com/r/en-US/ug973-vivado-release-notes-install-license/License-Manager";
+          description = "Vivado/Vitis License Manager - view, load and manage Xilinx/AMD license files";
+        };
+      };
       packages.x86_64-linux.vitis = createXilinxPkg {
         product = "Vitis";
         meta = metaCommon // {
@@ -192,6 +234,7 @@
       packages.x86_64-linux.xsct = pkgs.buildFHSEnv {
         name = "xsct";
         inherit targetPkgs;
+        extraBuildCommands = fhsExtraBuildCommands;
         runScript = pkgs.writeScript "xilinx-xsct-runner" (
           (runScriptPrefix { })
           + ''
@@ -208,6 +251,7 @@
         inherit (self.packages.x86_64-linux)
           xilinx-shell
           vivado
+          vlm
           vitis
           vitis_hls
           model_composer

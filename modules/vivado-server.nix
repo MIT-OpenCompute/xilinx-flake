@@ -21,11 +21,20 @@ let
 
   vivadoBin = "${cfg.installDir}/${cfg.version}/Vivado/bin";
 
+  # lmgrd/xilinxd/lmutil are linked against /lib64/ld-lsb-x86-64.so.3, the
+  # LSB-compat dynamic loader real distros' lsb-release packages symlink to
+  # the regular one. buildFHSEnv never creates it, so those binaries fail to
+  # exec at all inside the sandbox ("required file not found") without this.
+  fhsExtraBuildCommands = ''
+    ln -sf ld-linux-x86-64.so.2 "$out/usr/lib64/ld-lsb-x86-64.so.3"
+  '';
+
   # Build a minimal FHS env that exec's a specific Vivado daemon.
   # The runScript receives "$@" so ExecStart args are forwarded.
   mkDaemonFhs = name: script:
     pkgs.buildFHSEnv {
       inherit name targetPkgs;
+      extraBuildCommands = fhsExtraBuildCommands;
       runScript = pkgs.writeScript "${name}-runner" script;
     };
 
@@ -69,6 +78,7 @@ let
   vivadoRemoteFhs = pkgs.buildFHSEnv {
     name = "vivado-remote-fhs";
     inherit targetPkgs;
+    extraBuildCommands = fhsExtraBuildCommands;
     runScript = pkgs.writeScript "vivado-batch-runner" (
       ''
         #!/bin/sh
